@@ -132,3 +132,27 @@ export fn vf_selftest() i32 {
     return 0;
 }
 
+var state_json: [512]u8 = undefined;
+var state_json_len: usize = 0;
+
+/// Serialises the control state for the page script (testing and debugging). Returns a
+/// pointer to the JSON text; its length is returned by vf_state_len().
+export fn vf_state() [*]const u8 {
+    const a = &app.?;
+    const s = &a.state;
+    const p = s.plane;
+    const json = std.fmt.bufPrint(&state_json,
+        \\{{"frame":{d},"fps":{d},"seed":"{s}","help":{},"hud":{},"paused":{},"tail":{d},"hue":{d},"pan_x":{d},"pan_y":{d},"roll":{d},"yaw":{d},"pitch":{d},"zoom":{d}}}
+    , .{
+        a.frame,          a.counter.average,  s.seed.label(),   s.show_help,
+        s.show_hud,       s.paused,           s.params.tail,    s.params.hue_shift,
+        p.pan_x,          p.pan_y,            p.roll,           p.yaw,
+        p.pitch,          p.zoom,
+    }) catch unreachable;
+    state_json_len = json.len;
+    return &state_json;
+}
+
+export fn vf_state_len() usize {
+    return state_json_len;
+}

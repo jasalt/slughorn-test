@@ -87,6 +87,14 @@ pub fn build(b: *std.Build) void {
         .install_subdir = "",
         .exclude_extensions = &.{ ".sh", ".py" },
     }).step);
+
+    // Headless evaluation: serves the page and runs ?selftest in headless Chromium.
+    const web_smoke = b.addSystemCommand(&.{"sh"});
+    web_smoke.addFileArg(b.path("web/smoke.sh"));
+    web_smoke.addDirectoryArg(b.path("web"));
+    web_smoke.addArtifactArg(wasm);
+    web_smoke.has_side_effects = true;
+    b.step("web-smoke", "Run the web build's selftest in headless Chromium").dependOn(&web_smoke.step);
 }
 
 /// slughorn core (C++20) plus our C ABI shim, compiled with Zig's bundled clang/libc++.

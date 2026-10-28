@@ -271,6 +271,14 @@ async function main() {
 	fitCanvas();
 	if (ex.vf_init() !== 0) throw new Error("vf_init failed");
 	attachInput(ex);
+	// Inspection hook for automated tests and the console.
+	window.vectorFeedback = {
+		state: () => {
+			const ptr = ex.vf_state();
+			return JSON.parse(str(ptr, ex.vf_state_len()));
+		},
+	};
+
 	// Optional ?seed=N (0-4) picks the initial seed shape via its key binding.
 	const seed = params.get("seed");
 	if (seed !== null && /^[0-4]$/.test(seed)) {
