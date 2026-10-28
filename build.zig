@@ -59,6 +59,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     test_mod.addImport("slughorn_c", slughorn_c);
+    test_mod.addImport("gl_c", gl_c);
     test_mod.linkLibrary(slughorn_lib);
     const unit_tests = b.addTest(.{ .root_module = test_mod });
     const test_step = b.step("test", "Run headless unit tests");
@@ -72,5 +73,6 @@ pub fn build(b: *std.Build) void {
     smoke.addArg("--screenshot");
     _ = smoke.addOutputFileArg("selftest.ppm");
     smoke.expectExitCode(0);
+    smoke.has_side_effects = true;
     b.step("smoke", "Render frames headless under Xvfb and validate output").dependOn(&smoke.step);
 }
