@@ -1,0 +1,13 @@
+.{
+    .name = .zig_vector_feedback,
+    .version = "0.0.1",
+    .dependencies = .{
+        .slughorn = .{
+            .url = "https://github.com/AlphaPixel/slughorn/archive/3ad0529d59a87bc29bb56ea91c02eae073ce6e97.tar.gz",
+            .hash = "N-V-__8AAMLdEADKU6_M-Zf5tXyrkhImNz6jlyFX0DEsJK0L",
+        },
+    },
+    .minimum_zig_version = "0.17.0",
+    .paths = .{""},
+    .fingerprint = 0x4602e647feeb14c3,
+}
