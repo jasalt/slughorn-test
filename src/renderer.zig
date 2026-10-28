@@ -98,6 +98,10 @@ pub const Renderer = struct {
 
     fbos: [2]gl.GLuint = .{ 0, 0 },
     color: [2]gl.GLuint = .{ 0, 0 },
+    /// RGBA8 copy target for reading the float feedback buffer back as bytes
+    /// (WebGL2 cannot read float attachments as UNSIGNED_BYTE).
+    readback_fbo: gl.GLuint = 0,
+    readback_tex: gl.GLuint = 0,
     /// Index of the buffer holding the most recent feedback frame.
     current: u1 = 0,
     size: [2]u32 = .{ 0, 0 },
@@ -188,22 +192,28 @@ pub const Renderer = struct {
         gl.glGenTextures(2, &self.color);
         gl.glGenFramebuffers(2, &self.fbos);
         for (self.color, self.fbos) |tex, fbo| {
-            gl.glBindTexture(gl.GL_TEXTURE_2D, tex);
             // Float storage lets faint trails keep decaying instead of sticking at 8-bit steps.
-            gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA16F, @intCast(width), @intCast(height), 0, gl.GL_RGBA, gl.GL_FLOAT, null);
-            gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR);
-            gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR);
-            gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_BORDER);
-            gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_BORDER);
-            const black = [4]f32{ 0, 0, 0, 1 };
-            gl.glTexParameterfv(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_BORDER_COLOR, &black);
-
-            gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo);
-            gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, tex, 0);
-            if (gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE) return error.IncompleteFramebuffer;
+            try attachTarget(fbo, tex, gl.GL_RGBA16F, gl.GL_FLOAT, width, height);
         }
+        gl.glGenTextures(1, &self.readback_tex);
+        gl.glGenFramebuffers(1, &self.readback_fbo);
+        try attachTarget(self.readback_fbo, self.readback_tex, gl.GL_RGBA8, gl.GL_UNSIGNED_BYTE, width, height);
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0);
         self.clearFeedback();
+    }
+
+    // The plane quad's UVs span exactly [0, 1], so edge clamping only affects the
+    // bilinear fringe; everything outside the plane is cleared to black each frame.
+    fn attachTarget(fbo: gl.GLuint, tex: gl.GLuint, internal: gl.GLint, kind: gl.GLenum, width: u32, height: u32) Error!void {
+        gl.glBindTexture(gl.GL_TEXTURE_2D, tex);
+        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, internal, @intCast(width), @intCast(height), 0, gl.GL_RGBA, kind, null);
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR);
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR);
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE);
+        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE);
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo);
+        gl.glFramebufferTexture2D(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, gl.GL_TEXTURE_2D, tex, 0);
+        if (gl.glCheckFramebufferStatus(gl.GL_FRAMEBUFFER) != gl.GL_FRAMEBUFFER_COMPLETE) return error.IncompleteFramebuffer;
     }
 
     pub fn clearFeedback(self: *Renderer) void {
@@ -256,7 +266,12 @@ pub const Renderer = struct {
 
     /// Copies the current feedback frame to the window and draws `overlay` (the HUD) on top.
     pub fn presentPass(self: *Renderer, width: u32, height: u32, overlay: []const geometry.Vertex) void {
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0);
+        self.copyFeedback(0, width, height);
+        self.drawVectors(overlay, @floatFromInt(width), @floatFromInt(height));
+    }
+
+    fn copyFeedback(self: *Renderer, fbo: gl.GLuint, width: u32, height: u32) void {
+        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, fbo);
         gl.glViewport(0, 0, @intCast(width), @intCast(height));
         gl.glDisable(gl.GL_BLEND);
         gl.glUseProgram(self.present.id);
@@ -264,8 +279,6 @@ pub const Renderer = struct {
         gl.glBindTexture(gl.GL_TEXTURE_2D, self.color[self.current]);
         gl.glBindVertexArray(self.empty_vao);
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3);
-
-        self.drawVectors(overlay, @floatFromInt(width), @floatFromInt(height));
     }
 
     fn drawVectors(self: *Renderer, vertices: []const geometry.Vertex, w: f32, h: f32) void {
@@ -289,9 +302,10 @@ pub const Renderer = struct {
     /// Reads back RGBA8 pixels (bottom row first) of the window or the feedback buffer.
     pub fn readPixels(self: *Renderer, target: Target, width: u32, height: u32, out: []u8) void {
         std.debug.assert(out.len >= @as(usize, width) * height * 4);
+        if (target == .feedback) self.copyFeedback(self.readback_fbo, self.size[0], self.size[1]);
         gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, switch (target) {
             .screen => 0,
-            .feedback => self.fbos[self.current],
+            .feedback => self.readback_fbo,
         });
         gl.glPixelStorei(gl.GL_PACK_ALIGNMENT, 1);
         gl.glReadPixels(0, 0, @intCast(width), @intCast(height), gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, out.ptr);
@@ -302,9 +316,13 @@ pub const Renderer = struct {
         if (self.fbos[0] != 0) {
             gl.glDeleteFramebuffers(2, &self.fbos);
             gl.glDeleteTextures(2, &self.color);
+            gl.glDeleteFramebuffers(1, &self.readback_fbo);
+            gl.glDeleteTextures(1, &self.readback_tex);
         }
         self.fbos = .{ 0, 0 };
         self.color = .{ 0, 0 };
+        self.readback_fbo = 0;
+        self.readback_tex = 0;
         self.size = .{ 0, 0 };
     }
 };

@@ -2,7 +2,13 @@
 //! example/slughorn-example-glfw.cpp (MIT, Copyright (c) 2026 AlphaPixel LLC), which in
 //! turn implements Eric Lengyel's Slug algorithm.
 
-pub const version = "#version 330 core\n";
+const builtin = @import("builtin");
+
+/// GLSL 3.30 core on desktop; GLSL ES 3.00 (WebGL2) on wasm, which needs explicit precision.
+pub const version = if (builtin.cpu.arch.isWasm())
+    "#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp usampler2D;\n"
+else
+    "#version 330 core\n";
 
 /// Vector shapes in pixel space. Prefix with `#define TEX_WIDTH <log2 atlas width>`.
 pub const slug_vert =
