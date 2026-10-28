@@ -9,5 +9,6 @@ test {
     _ = @import("controls.zig");
     _ = @import("geometry.zig");
     _ = @import("scene.zig");
+    _ = @import("keymap.zig");
     _ = @import("main.zig");
 }
