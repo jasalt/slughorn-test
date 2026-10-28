@@ -7,4 +7,5 @@ test {
     _ = @import("slughorn.zig");
     _ = @import("shapes.zig");
     _ = @import("controls.zig");
+    _ = @import("geometry.zig");
 }
