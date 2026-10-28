@@ -6,24 +6,8 @@ pub fn build(b: *std.Build) void {
 
     const slughorn_dep = b.dependency("slughorn", .{});
 
-    // slughorn core (C++20) plus our C ABI shim, compiled with Zig's bundled clang/libc++.
-    const slughorn_mod = b.createModule(.{
-        .target = target,
-        .optimize = optimize,
-        .link_libcpp = true,
-    });
-    slughorn_mod.addIncludePath(slughorn_dep.path(""));
-    slughorn_mod.addIncludePath(b.path("src/c"));
-    const cxx_flags: []const []const u8 = &.{ "-std=c++20", "-fno-sanitize=undefined" };
-    slughorn_mod.addCSourceFile(.{ .file = slughorn_dep.path("slughorn/slughorn.cpp"), .flags = cxx_flags });
-    slughorn_mod.addCSourceFile(.{ .file = b.path("src/c/slughorn_c.cpp"), .flags = cxx_flags });
-    const slughorn_lib = b.addLibrary(.{ .name = "slughorn", .root_module = slughorn_mod });
-
-    const slughorn_c = b.addTranslateC(.{
-        .root_source_file = b.path("src/c/slughorn_c.h"),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
+    const slughorn_lib = addSlughorn(b, slughorn_dep, target, optimize);
+    const slughorn_c = translateShim(b, target, optimize);
 
     const gl_c = b.addTranslateC(.{
         .root_source_file = b.path("src/c/gl.h"),
@@ -75,4 +59,56 @@ pub fn build(b: *std.Build) void {
     smoke.expectExitCode(0);
     smoke.has_side_effects = true;
     b.step("smoke", "Render frames headless under Xvfb and validate output").dependOn(&smoke.step);
+
+    // WebGL2 build: the same app core compiled to wasm32-wasi (libc/libc++ come from Zig's
+    // bundled wasi-libc), with src/web_gl.zig standing in for the GL headers.
+    const web_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
+    const web_optimize = b.option(std.builtin.OptimizeMode, "web-optimize", "Optimization mode for the web build (default small)") orelse .small;
+    const web_mod = b.createModule(.{
+        .root_source_file = b.path("src/web_main.zig"),
+        .target = web_target,
+        .optimize = web_optimize,
+        .link_libc = true,
+    });
+    web_mod.addImport("slughorn_c", translateShim(b, web_target, web_optimize));
+    web_mod.addImport("gl_c", b.createModule(.{ .root_source_file = b.path("src/web_gl.zig"), .target = web_target, .optimize = web_optimize }));
+    web_mod.linkLibrary(addSlughorn(b, slughorn_dep, web_target, web_optimize));
+    const wasm = b.addExecutable(.{ .name = "vector-feedback", .root_module = web_mod });
+    // A WASI reactor: no main, exports called from JS after _initialize runs constructors.
+    wasm.entry = .disabled;
+    wasm.wasi_exec_model = .reactor;
+    wasm.rdynamic = true;
+
+    const web_step = b.step("web", "Build the WebGL2/WebAssembly version into zig-out/web");
+    web_step.dependOn(&b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .{ .custom = "web" } } }).step);
+    web_step.dependOn(&b.addInstallDirectory(.{
+        .source_dir = b.path("web"),
+        .install_dir = .{ .custom = "web" },
+        .install_subdir = "",
+        .exclude_extensions = &.{ ".sh", ".py" },
+    }).step);
+}
+
+/// slughorn core (C++20) plus our C ABI shim, compiled with Zig's bundled clang/libc++.
+fn addSlughorn(b: *std.Build, dep: *std.Build.Dependency, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+    mod.addIncludePath(dep.path(""));
+    mod.addIncludePath(b.path("src/c"));
+    const cxx_flags: []const []const u8 = &.{ "-std=c++20", "-fno-sanitize=undefined" };
+    mod.addCSourceFile(.{ .file = dep.path("slughorn/slughorn.cpp"), .flags = cxx_flags });
+    mod.addCSourceFile(.{ .file = b.path("src/c/slughorn_c.cpp"), .flags = cxx_flags });
+    if (target.result.cpu.arch.isWasm()) mod.addCSourceFile(.{ .file = b.path("src/c/wasm_cxa.c") });
+    return b.addLibrary(.{ .name = "slughorn", .root_module = mod });
+}
+
+fn translateShim(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+    return b.addTranslateC(.{
+        .root_source_file = b.path("src/c/slughorn_c.h"),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
 }
