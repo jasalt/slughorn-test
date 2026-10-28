@@ -12,6 +12,8 @@ pub const Key = enum(u32) {
     heart,
     flower,
     spiral,
+    /// Unit square, used for HUD panels.
+    box,
 };
 
 /// Monospace advance of the stroke font, in em.
@@ -224,6 +226,14 @@ pub fn registerAll(atlas: anytype) !void {
     atlas.beginShape();
     spiral(atlas, 3);
     try atlas.endShape(@intFromEnum(Key.spiral));
+
+    atlas.beginShape();
+    atlas.moveTo(0, 0);
+    atlas.lineTo(1, 0);
+    atlas.lineTo(1, 1);
+    atlas.lineTo(0, 1);
+    atlas.close();
+    try atlas.endShape(@intFromEnum(Key.box));
 
     for (0..128) |ch| {
         atlas.beginShape();
