@@ -422,6 +422,19 @@ fn selftest(app: *App) !void {
     const extinguished = litFraction(buf, w, 0, 0, w, h, 2);
     failures += check("zero tail clears the loop", extinguished < 0.001, extinguished);
 
+    // Resizing the window must rebuild the feedback buffers and keep rendering.
+    gl.glfwSetWindowSize(app.window, @intCast(w / 2), @intCast(h / 2));
+    app.state.params = .{};
+    app.state.seed = .stars;
+    for (0..20) |_| {
+        gl.glfwPollEvents();
+        try app.step();
+    }
+    const resized = app.framebufferSize();
+    app.renderer.readPixels(.feedback, resized[0], resized[1], buf);
+    const resized_lit = litFraction(buf, resized[0], 0, 0, resized[0], resized[1], 16);
+    failures += check("resize rebuilds the feedback buffers", resized[0] == w / 2 and app.renderer.size[0] == w / 2 and resized_lit > 0.02, resized_lit);
+
     if (failures > 0) {
         std.log.err("selftest: {d} check(s) failed", .{failures});
         return error.SelftestFailed;
