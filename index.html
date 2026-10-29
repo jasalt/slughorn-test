@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vector-feedback</title>
+<style>
+	html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+	#canvas { display: block; width: 100vw; height: 100vh; outline: none; touch-action: none; }
+	#log, #result { position: fixed; left: 0; bottom: 0; margin: 0; color: #ccc; font: 12px monospace; pointer-events: none; }
+	#log { display: none; }
+	body[data-selftest] #log { display: block; bottom: 1.5em; background: rgba(0, 0, 0, 0.6); }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="0"></canvas>
+<pre id="log"></pre>
+<div id="result"></div>
+<script type="module" src="vector-feedback.js"></script>
+</body>
+</html>
