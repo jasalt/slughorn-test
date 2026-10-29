@@ -10,6 +10,8 @@ tunnels, spirals and trails. Animated vector shapes, packed by slughorn and draw
 Slug coverage shader, keep adding new light to the loop. A HUD shows the rendering FPS in
 real time. The HUD text is also slughorn vector shapes.
 
+https://github.com/user-attachments/assets/37f5d467-77a0-4922-b571-099e0f94f34f
+
 ## Requirements
 
 - Zig 0.17.0
