@@ -52,6 +52,14 @@ runtime, so you don't need Emscripten. In the web build:
 - `?selftest[=frames]` runs the selftest in the page, and `?seed=0..4` picks the starting
   seed shape.
 
+### Publishing
+
+`tools/publish-pages.sh` builds the web version and commits it to the orphan `pages` branch.
+That branch holds only `index.html`, the JS, the wasm, `.nojekyll` and a README naming the source
+commit. The script works in a temporary worktree, so it doesn't touch your checkout. It doesn't
+push; afterwards run `git push origin pages` and point GitHub/GitLab Pages at that branch. Set
+`ZIG` if `zig` isn't on `PATH`.
+
 ## Controls
 
 | Input | Action |
